@@ -16,8 +16,7 @@
   "author": "",
   "license": "ISC",
   "description": ""
-}
-
+},
 "dependencies": {
   "express": "^4.17.1"
 }
