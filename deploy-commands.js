@@ -1,38 +1,36 @@
-import { REST, Routes } from 'discord.js';
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
+import { REST, Routes } from 'discord.js';
 import { fileURLToPath } from 'url';
 
-// __dirname 相当の設定（ESM用）
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// スラッシュコマンドを収集
+// コマンド読み込み
 const commands = [];
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = await import(`file://${filePath}`);
+  const command = await import(`./commands/${file}`);
   commands.push(command.default.data.toJSON());
 }
 
-// REST API セットアップ
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+// REST APIで登録
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
-// コマンド登録（グローバルまたはギルド）
+const guildId = process.env.GUILD_ID;
+
 try {
-  console.log('🔄 スラッシュコマンドを登録中...');
+  console.log(`🔄 スラッシュコマンドをギルド ${guildId} に登録中...`);
 
   await rest.put(
-    Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), // テスト用はギルドに登録
-    // Routes.applicationCommands(process.env.CLIENT_ID), // グローバル登録したい場合はこちらに切り替え
-    { body: commands },
+    Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId),
+    { body: commands }
   );
 
-  console.log('✅ スラッシュコマンドの登録が完了しました。');
+  console.log(`✅ 登録完了: ${guildId}`);
 } catch (error) {
-  console.error('❌ スラッシュコマンド登録中にエラーが発生:', error);
+  console.error('❌ コマンド登録失敗:', error);
 }

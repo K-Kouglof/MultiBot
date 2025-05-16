@@ -1,117 +1,85 @@
-import dotenv from 'dotenv';
-dotenv.config();
+// index.js
+import 'dotenv/config';
+import { Client, GatewayIntentBits, Collection } from 'discord.js';
+import { readdirSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import express from 'express';
 
-import {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} from 'discord.js';
-import fs from 'fs';
 
+// clientは最初に定義する！
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
-  partials: [Partials.Channel],
+});
+client.commands = new Collection();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// イベントハンドラー読み込み
+import messageCreateHandler   from './events/messageCreate.js';
+import interactionCreateHandler from './events/interactionCreate.js';
+
+// メッセージCreate（自動スレッド生成）
+client.on('messageCreate', message => messageCreateHandler.execute(message, client));
+
+// InteractionCreate（スラッシュ & ボタン両対応）
+client.on('interactionCreate', interaction => {
+  // まずボタン処理を優先
+  interactionCreateHandler.execute(interaction, client);
+  // スラッシュコマンドは下の既存ロジックで処理します
 });
 
-// ✅ 起動確認
-client.once('ready', () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
-});
+// スラッシュコマンド読み込み
+const commandFiles = readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+  const commandModule = await import(`./commands/${file}`);
+  const command = commandModule.default || commandModule;
 
-// ✅ メッセージ → スレッド作成 & 通知ロールping
-client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
-
-  const configPath = './config.json';
-  if (!fs.existsSync(configPath)) return;
-  const { notifyChannel, notifyRole } = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-  if (message.channel.id !== notifyChannel) return;
-
-  try {
-    await message.channel.send(`<@&${notifyRole}> が来ています～！\n見に行ってみましょう！`);
-
-    const thread = await message.startThread({
-      name: message.content,
-      autoArchiveDuration: 60,
-      reason: '新しい募集スレッド作成',
-    });
-
-    console.log('✅ スレッド作成:', thread.id);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('end').setLabel('募集終了').setStyle(ButtonStyle.Danger)
-    );
-
-    const embed = new EmbedBuilder()
-      .setColor(0x00bfff)
-      .setTitle('🎮 スレッド操作方法')
-      .setDescription('⬇️ 下のボタンで参加管理ができます。\n「募集終了」はスレッドを閉じることができます。')
-      .setTimestamp();
-
-    await thread.send({ embeds: [embed], components: [row] });
-  } catch (error) {
-    console.error('❌ スレッド作成または送信エラー:', error);
+  if (!command.data || !command.execute) {
+    console.warn(`❌ 無効なコマンド形式: ${file}`);
+    continue;
   }
-});
 
-// ✅ ボタン操作
+  client.commands.set(command.data.name, command);
+}
+
+// スラッシュコマンド処理
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
+  if (!interaction.isChatInputCommand()) return;
 
-  const configPath = './config.json';
-  if (!fs.existsSync(configPath)) return;
-  const { notifyRole } = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-  const thread = interaction.channel?.isThread() ? interaction.channel : null;
-
-  if (!thread) {
-    await interaction.reply({
-      content: '❌ スレッドが見つかりませんでした。',
-      flags: 64,
-    });
-    return;
-  }
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
 
   try {
-    if (interaction.customId === 'end') {
-      await thread.setLocked(true);
-      if (!thread.name.startsWith('〆 ')) {
-        await thread.setName(`〆 ${thread.name}`);
-      }
-      await interaction.reply({ content: '✅ 募集は終了しました。' });
-    }
+    await command.execute(interaction);
   } catch (error) {
-    console.error('❌ インタラクションエラー:', error);
-    const replyData = { content: 'エラーが発生しました。', flags: 64 };
+    console.error(error);
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(replyData);
+      await interaction.followUp({ content: '❌ コマンドの実行に失敗しました。', ephemeral: true });
     } else {
-      await interaction.reply(replyData);
+      await interaction.reply({ content: '❌ コマンドの実行に失敗しました。', ephemeral: true });
     }
   }
 });
 
-client.login(process.env.TOKEN);
+client.once('ready', () => {
+  console.log(`Bot is logged in as ${client.user.tag}`);
+});
 
-import express from 'express';
+client.login(process.env.DISCORD_TOKEN);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000; // Renderは自動でPORTを設定します
 
 app.get('/', (req, res) => {
-  res.send('Bot is running!');
+    res.send('Bot is running!');
 });
 
-app.listen(PORT, () => {
-  console.log(`HTTP server is listening on port ${PORT}`);
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
 });
-
