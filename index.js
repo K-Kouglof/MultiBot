@@ -74,12 +74,10 @@ client.once('ready', () => {
 client.login(process.env.DISCORD_TOKEN);
 
 const app = express();
-const port = process.env.PORT || 3000; // Renderは自動でPORTを設定します
-
+const port = process.env.PORT || 3000;
 app.get('/', (req, res) => {
-    res.send('Bot is running!');
+  res.send('Bot is running!');
 });
-
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });

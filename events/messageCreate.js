@@ -34,7 +34,7 @@ export default {
     new EmbedBuilder()
       .setColor(0x00bfff)
       .setTitle('🔔 通知')
-      .setDescription('通知が届いているよ！\n見に行ってみよう！')
+      .setDescription('通知が届いているわ！\n見に行ってみましょう！')
   ]
 });
 
